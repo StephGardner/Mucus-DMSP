@@ -1,0 +1,1250 @@
+---
+title: "DMSP-degrading genes in coral mucus"
+author: "S. Gardner"
+date: "13 March 2022"
+output: html_document
+---
+Load packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(phyloseq)
+library(ggplot2)
+library(permute)
+library(lattice)
+library(vegan)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(genefilter)
+library(microbiome)
+library(tidyverse)
+library(tibble)
+library(Biostrings)
+```
+
+# Fig 1(a,b) - PAM
+
+```{r}
+library(rstatix)
+library(ggpubr)
+
+# MQY - (FV/FM)
+minipam <- read.csv("MiniPAM_Masterfile.csv", header = TRUE)  %>%
+  filter(MQY7pm != 0.00)
+
+minipam.summary <- minipam %>%
+  group_by(Temperature, Day) %>%
+  get_summary_stats(MQY7pm, type = "mean_se")
+
+theme_set(theme_bw())
+Fig1a.minipam <- minipam.summary %>%
+                ggplot(aes(x = Day, y = mean, group = Temperature)) +
+                  geom_path(aes(linetype = Temperature)) +
+                  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.1) +
+                  geom_point(stat = "identity", aes(fill = Temperature), size = 5, shape = 21) +
+                  theme(aspect.ratio = 1, legend.position = "right") +
+                  theme(axis.text.x = element_text(colour = "black", size = 11), axis.text.y = element_text(colour = "black", size = 11)) +
+                  theme(axis.title.x = element_text(colour = "black", size = 11), axis.title.y = element_text(colour = "black", size = 11), 
+                     legend.title = element_text(size = 11), legend.text = element_text(size = 11)) +
+                  theme(panel.grid.minor = element_line(size = 0.5), panel.grid.major = element_line(size = 0.5)) +
+                  scale_fill_manual(values = c("white", "red")) +
+                  scale_linetype_manual(values=c("dashed", "solid")) +
+                  ylab("FV/FMˈ") + xlab("Time (days)") +
+                  ylim(0, 0.8) + scale_x_continuous(breaks = seq(0,12,1))
+Fig1a.minipam
+
+# EQY - (ΔF/FMˈ)
+minipam <- read.csv("MiniPAM_Masterfile.csv", header = TRUE)   %>%
+  filter(EQY12pm != 0.00)
+
+minipam.summary <- minipam %>%
+  group_by(Temperature, Day) %>%
+  get_summary_stats(EQY12pm, type = "mean_se")
+
+theme_set(theme_bw())
+Fig1b.minipam <- minipam.summary %>%
+                ggplot(aes(x = Day, y = mean, group = Temperature)) +
+                  geom_path(aes(linetype = Temperature)) +
+                  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.1) +
+                  geom_point(stat = "identity", aes(fill = Temperature), size = 5, shape = 21) +
+                  theme(aspect.ratio = 1, legend.position = "right") +
+                  theme(axis.text.x = element_text(colour = "black", size = 11), axis.text.y = element_text(colour = "black", size = 11)) +
+                  theme(axis.title.x = element_text(colour = "black", size = 11), axis.title.y = element_text(colour = "black", size = 11), 
+                     legend.title = element_text(size = 11), legend.text = element_text(size = 11)) +
+                  theme(panel.grid.minor = element_line(size = 0.5), panel.grid.major = element_line(size = 0.5)) +
+                  scale_fill_manual(values = c("white", "red")) +
+                  scale_linetype_manual(values=c("dashed", "solid")) +
+                  ylab("ΔF/FMˈ") + xlab("Time (days)") +
+                  ylim(0, 0.8) + scale_x_continuous(breaks = seq(0,12,1))
+Fig1b.minipam
+
+Figure1 <- ggarrange(Fig1a.minipam, Fig1b.minipam, 
+                     labels = c("(A)", "(B)"),
+                     ncol = 2, nrow = 1, 
+                     common.legend = TRUE, legend = "bottom")
+#annotate_figure(Figure2, top = text_grob("Mucus", color = "black", size = 11), fig.lab.pos = "top.left")
+```
+
+### MQY stats
+
+```{r}
+# MQY - (FV/FM)
+minipam <- read.csv("MiniPAM_Masterfile.csv", header = TRUE)  %>%
+  filter(MQY7pm != 0.00)
+
+minipam.summary <- minipam %>%
+  group_by(Temperature, Day) %>%
+  get_summary_stats(MQY7pm, type = "mean_se")
+
+minipam$Day <- factor(minipam$Day, levels = c("D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10"))
+ggboxplot(minipam, x = "Day", y = "MQY7pm", color = "Temperature", palette = "jco", nrow = 1, add = "point") # facet.by = "Section", 
+
+# Identify outliers
+minipam %>% 
+  group_by(Temperature, Day) %>%
+  identify_outliers(MQY7pm)
+
+# Check for normality with Shapiro
+minipam %>%
+  group_by(Day) %>%
+  shapiro_test(MQY7pm)
+
+# Welch's T test
+stat.test <- minipam %>%
+  t_test(MQY7pm ~ Day, var.equal = TRUE) %>%
+  add_significance()
+stat.test
+
+# ANOVA
+res.aov <- minipam %>% anova_test(MQY7pm ~ Temperature*Day)
+res.aov
+
+res.aov <- minipam %>% anova_test(MQY7pm ~ Day)
+res.aov
+
+# # Pairwise comparisons using Tukey's test:
+pwc <- minipam %>% tukey_hsd(MQY7pm ~ Day)
+pwc
+```
+
+### EQY stats
+
+```{r}
+# EQY -
+minipam <- read.csv("MiniPAM_Masterfile.csv", header = TRUE)  %>%
+  filter(EQY12pm != 0.00)
+
+minipam.summary <- minipam %>%
+  group_by(Temperature, Day) %>%
+  get_summary_stats(EQY12pm, type = "mean_se")
+
+minipam$Day <- factor(minipam$Day, levels = c("D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10"))
+ggboxplot(minipam, x = "Day", y = "EQY12pm", color = "Temperature", palette = "jco", nrow = 1, add = "point")
+
+# Identify outliers
+minipam %>% 
+  group_by(Temperature, Day) %>%
+  identify_outliers(EQY12pm)
+
+# Check for normality with Shapiro
+minipam %>%
+  group_by(Day) %>%
+  shapiro_test(EQY12pm)
+
+# Welch's T test
+stat.test <- minipam %>%
+  t_test(EQY12pm ~ Day, var.equal = TRUE) %>%
+  add_significance()
+stat.test
+
+# ANOVA
+res.aov <- minipam %>% anova_test(EQY12pm ~ Temperature*Day)
+res.aov
+
+res.aov <- minipam %>% anova_test(EQY12pm ~ Day) 
+res.aov
+
+# # Pairwise comparisons using Tukey's test:
+pwc <- minipam %>% tukey_hsd(EQY12pm ~ Day)
+pwc
+```
+
+# Fig 1(c,d) - Density and Chl
+
+```{r}
+library(rstatix)
+library(ggpubr)
+
+# Symbiodiniaceae density
+densitychl <- read.csv("Density_Chl_Masterfile.csv", header = TRUE) 
+
+density.summary <- densitychl %>%
+  group_by(Temperature, Day) %>%
+  get_summary_stats(Cells.cm2, type = "mean_se")
+
+theme_set(theme_bw())
+Fig1c.density <- density.summary %>%
+                ggplot(aes(x = Day, y = mean, group = Temperature)) +
+                  geom_path(aes(linetype = Temperature)) +
+                  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.1) +
+                  geom_point(stat = "identity", aes(fill = Temperature), size = 5, shape = 21) +
+                  theme(aspect.ratio = 1, legend.position = "right") +
+                  theme(axis.text.x = element_text(colour = "black", size = 11), axis.text.y = element_text(colour = "black", size = 11)) +
+                  theme(axis.title.x = element_text(colour = "black", size = 11), axis.title.y = element_text(colour = "black", size = 11), 
+                     legend.title = element_text(size = 11), legend.text = element_text(size = 11)) +
+                  theme(panel.grid.minor = element_line(size = 0.5), panel.grid.major = element_line(size = 0.5)) +
+                  scale_fill_manual(values = c("white", "red")) +
+                  scale_linetype_manual(values=c("dashed", "solid")) +
+                  ylab("Symbiodiniaceae density (cells cm-2)") + xlab("Time (days)") +
+                  ylim(0, 5e+06) + scale_x_continuous(breaks = seq(0,12,1))
+Fig1c.density
+
+# Chlorophyll a
+chl.summary <- densitychl %>%
+  group_by(Temperature, Day) %>%
+  get_summary_stats(Chla.ugcm2, type = "mean_se")
+
+theme_set(theme_bw())
+Fig1d.chl <- chl.summary %>%
+                ggplot(aes(x = Day, y = mean, group = Temperature)) +
+                  geom_path(aes(linetype = Temperature)) +
+                  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.1) +
+                  geom_point(stat = "identity", aes(fill = Temperature), size = 5, shape = 21) +
+                  theme(aspect.ratio = 1, legend.position = "right") +
+                  theme(axis.text.x = element_text(colour = "black", size = 11), axis.text.y = element_text(colour = "black", size = 11)) +
+                  theme(axis.title.x = element_text(colour = "black", size = 11), axis.title.y = element_text(colour = "black", size = 11), 
+                     legend.title = element_text(size = 11), legend.text = element_text(size = 11)) +
+                  theme(panel.grid.minor = element_line(size = 0.5), panel.grid.major = element_line(size = 0.5)) +
+                  scale_fill_manual(values = c("white", "red")) +
+                  scale_linetype_manual(values=c("dashed", "solid")) +
+                  ylab("Chlorophyll a (ug cm-2)") + xlab("Time (days)") +
+                  ylim(0, 2.5) + xlim(0,12) + scale_x_continuous(breaks = seq(0,12,1))
+Fig1d.chl
+
+Figure1.cd <- ggarrange(Fig1c.density, Fig1d.chl, 
+                     labels = c("(C)", "(D)"),
+                     ncol = 2, nrow = 1, 
+                     common.legend = TRUE, legend = "bottom")
+#annotate_figure(Figure1.cd, top = text_grob("Mucus", color = "black", size = 11), fig.lab.pos = "top.left")
+```
+
+### Density Stats
+
+```{r}
+
+densitychl <- read.csv("Density_Chl_Masterfile.csv", header = TRUE) 
+
+density.summary <- densitychl %>%
+  group_by(Temperature, Day) %>%
+  get_summary_stats(Cells.cm2, type = "mean_se")
+
+densitychl$Day <- factor(densitychl$Day, levels = c("D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10"))
+ggboxplot(densitychl, x = "Day", y = "Cells.cm2", color = "Temperature", palette = "jco", nrow = 1, add = "point") # facet.by = "Section", 
+
+# Identify outliers
+densitychl %>% 
+  group_by(Temperature, Day) %>%
+  identify_outliers(Cells.cm2)
+
+# Check for normality with Shapiro
+densitychl %>%
+  group_by(Day) %>%
+  shapiro_test(Cells.cm2) 
+
+# Welch's T test
+stat.test <- densitychl %>%
+  t_test(Cells.cm2 ~ Day, var.equal = TRUE) %>%
+  add_significance()
+stat.test
+
+# ANOVA
+res.aov <- densitychl %>% anova_test(Cells.cm2 ~ Temperature*Day)
+
+res.aov <- densitychl %>% anova_test(Cells.cm2 ~ Day)
+
+```
+
+### Chlorophyll a stats
+
+```{r}
+densitychl <- read.csv("Density_Chl_Masterfile.csv", header = TRUE) 
+
+density.summary <- densitychl %>%
+  group_by(Temperature, Day) %>%
+  get_summary_stats(Chla.ugcm2, type = "mean_se")
+
+densitychl$Day <- factor(densitychl$Day, levels = c("D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D10"))
+ggboxplot(densitychl, x = "Day", y = "Chla.ugcm2", color = "Temperature", palette = "jco", nrow = 1, add = "point")
+
+# Identify outliers
+densitychl %>% 
+  group_by(Temperature, Day) %>%
+  identify_outliers(Chla.ugcm2)
+
+# Check for normality with Shapiro
+densitychl %>%
+  group_by(Day) %>%
+  shapiro_test(Chla.ugcm2)
+
+# Welch's T test
+stat.test <- densitychl %>%
+  t_test(Chla.ugcm2 ~ Day, var.equal = TRUE) %>%
+  add_significance()
+stat.test
+
+# ANOVA
+res.aov <- densitychl %>% anova_test(Chla.ugcm2 ~ Temperature*Day)
+res.aov
+
+res.aov <- densitychl %>% anova_test(Chla.ugcm2 ~ Day)
+res.aov
+
+# Pairwise comparisons using Tukey's test:
+pwc <- densitychl %>% tukey_hsd(Chla.ugcm2 ~ Day)
+```
+
+# Fig 2 - NMR Data
+https://www.datanovia.com/en/lessons/anova-in-r/
+## Figure 2(a-d)
+
+```{r}
+library(rstatix)
+library(ggpubr)
+
+## MUCUS
+nmr.mucus <- read.csv("NMR qPCR Masterfile_Mucus.csv", header = TRUE)
+
+# DMSP
+nmr.mucus.dmsp.summary <- nmr.mucus %>%
+  group_by(Treatment, Timepoint) %>%
+  get_summary_stats(DMSP_nmol.ml, type = "mean_se")
+
+theme_set(theme_bw())
+Mucus.DMSP <- nmr.mucus.dmsp.summary %>%
+              ggplot(aes(x = Timepoint, y = mean, group = Treatment)) +
+                geom_path(aes(linetype = Treatment)) +
+                geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.1) +
+                geom_point(stat = "identity", aes(fill = Treatment), size = 5, shape = 21) +
+                theme(aspect.ratio = 1, legend.position = "right") +
+                theme(axis.text.x = element_text(colour = "black", size = 11), axis.text.y = element_text(colour = "black", size = 11)) +
+                theme(axis.title.x = element_text(colour = "black", size = 11), axis.title.y = element_text(colour = "black", size = 11), 
+                   legend.title = element_text(size = 11), legend.text = element_text(size = 11)) +
+                theme(panel.grid.minor = element_line(size = 0.5), panel.grid.major = element_line(size = 0.5)) +
+                scale_fill_manual(values = c("white", "red")) +
+                scale_linetype_manual(values=c("dashed", "solid")) +
+                ylab("DMSP (nmol/ml)") + xlab("Timepoint") +
+                ylim(0, 120)
+Mucus.DMSP
+
+# DMSO
+nmr.mucus.dmso.summary <- nmr.mucus %>%
+  group_by(Treatment, Timepoint) %>%
+  get_summary_stats(DMSO_nmol.ml, type = "mean_se")
+
+theme_set(theme_bw())
+Mucus.DMSO <- nmr.mucus.dmso.summary %>%
+              ggplot(aes(x = Timepoint, y = mean, group = Treatment)) +
+                geom_path(aes(linetype = Treatment)) +
+                geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.1) +
+                geom_point(stat = "identity", aes(fill = Treatment), size = 5, shape = 21) +
+                theme(aspect.ratio = 1, legend.position = "right") +
+                theme(axis.text.x = element_text(colour = "black", size = 11), axis.text.y = element_text(colour = "black", size = 11)) +
+                theme(axis.title.x = element_text(colour = "black", size = 11), axis.title.y = element_text(colour = "black", size = 11), 
+                   legend.title = element_text(size = 11), legend.text = element_text(size = 11)) +
+                theme(panel.grid.minor = element_line(size = 0.5), panel.grid.major = element_line(size = 0.5)) +
+                scale_fill_manual(values = c("white", "red")) +
+                scale_linetype_manual(values=c("dashed", "solid")) +
+                #scale_y_continuous(labels = scales::label_number(accuracy = 1)) +
+                ylab("DMSO (nmol/ml)") + xlab("Timepoint") +
+                ylim(0, 10)
+Mucus.DMSO
+
+## HOLOBIONT
+nmr.holobiont <- read.csv("NMR qPCR Masterfile_Holobiont.csv", header = TRUE) 
+
+# DMSP
+nmr.holobiont.dmsp.summary <- nmr.holobiont %>%
+  group_by(Treatment, Timepoint) %>%
+  get_summary_stats(DMSP_nmol.mm2, type = "mean_se")
+
+theme_set(theme_bw())
+Holob.DMSP <- nmr.holobiont.dmsp.summary %>%
+              ggplot(aes(x = Timepoint, y = mean, group = Treatment)) +
+                geom_path(aes(linetype = Treatment)) +
+                geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.1) +
+                geom_point(stat = "identity", aes(fill = Treatment), size = 5, shape = 21) +
+                theme(aspect.ratio = 1, legend.position = "right") +
+                theme(axis.text.x = element_text(colour = "black", size = 11), axis.text.y = element_text(colour = "black", size = 11)) +
+                theme(axis.title.x = element_text(colour = "black", size = 11), axis.title.y = element_text(colour = "black", size = 11), 
+                   legend.title = element_text(size = 11), legend.text = element_text(size = 11)) +
+                theme(panel.grid.minor = element_line(size = 0.5), panel.grid.major = element_line(size = 0.5)) +
+                scale_fill_manual(values = c("white", "red")) +
+                scale_linetype_manual(values=c("dashed", "solid")) +
+                ylab("DMSP (nmol/mm2)") + xlab("Timepoint") +
+                ylim(0, 100)
+Holob.DMSP
+
+
+# DMSO
+nmr.holobiont.dmso.summary <- nmr.holobiont %>%
+  group_by(Treatment, Timepoint) %>%
+  get_summary_stats(DMSO_nmol.mm2, type = "mean_se")
+
+theme_set(theme_bw())
+Holob.DMSO <- nmr.holobiont.dmso.summary %>%
+              ggplot(aes(x = Timepoint, y = mean, group = Treatment)) +
+                geom_path(aes(linetype = Treatment)) +
+                geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.1) +
+                geom_point(stat = "identity", aes(fill = Treatment), size = 5, shape = 21) +
+                theme(aspect.ratio = 1, legend.position = "right") +
+                theme(axis.text.x = element_text(colour = "black", size = 11), axis.text.y = element_text(colour = "black", size = 11)) +
+                theme(axis.title.x = element_text(colour = "black", size = 11), axis.title.y = element_text(colour = "black", size = 11), 
+                   legend.title = element_text(size = 11), legend.text = element_text(size = 11)) +
+                theme(panel.grid.minor = element_line(size = 0.5), panel.grid.major = element_line(size = 0.5)) +
+                scale_fill_manual(values = c("white", "red")) +
+                scale_linetype_manual(values=c("dashed", "solid")) +
+                #scale_y_continuous(labels = scales::label_number(accuracy = 1)) +
+                ylab("DMSO (nmol/mm2)") + xlab("Timepoint") +
+                ylim(0, 10)
+Holob.DMSO
+
+# Merge panels
+Figure2 <- ggarrange(Mucus.DMSP, Mucus.DMSO, Holob.DMSP, Holob.DMSO, 
+                     labels = c("(A)", "(B)", "(C)", "(D)"),
+                     ncol = 2, nrow = 2, 
+                     common.legend = TRUE, legend = "bottom")
+Figure2
+#ggexport(Figure2, filename = "Figure2-from R.pdf")
+```
+
+## DMSP Mucus stats
+
+```{r}
+nmr <- read.csv("NMR qPCR Masterfile_Mucus.csv", header = TRUE)
+
+# Summary statistics table
+nmr.summary <- nmr %>%
+  group_by(Treatment, Timepoint) %>%
+  get_summary_stats(DMSP_nmol.ml, type = "mean_se")
+
+nmr$Timepoint <- factor(nmr$Timepoint, levels = c("T0", "T1", "T2", "T3"))
+ggboxplot(nmr, x = "Timepoint", y = "DMSP_nmol.ml", color = "Treatment", palette = "jco", nrow = 1, add = "point")
+
+# Identify outliers
+nmr %>% 
+  group_by(Temperature, Timepoint) %>%
+  identify_outliers(DMSP_nmol.ml)
+
+# Check for normality with Shapiro
+nmr %>%
+  group_by(Timepoint, Treatment) %>%
+  shapiro_test(DMSP_nmol.ml)
+
+# homogeneity of variances or Levene's test
+nmr %>% levene_test(DMSP_nmol.ml ~ Treatment*Timepoint) # ok
+
+# ANOVA
+res.aov <- nmr %>% anova_test(DMSP_nmol.ml ~ Treatment*Timepoint)
+res.aov
+
+# # Pairwise comparisons using Tukey's test:
+pwc <- nmr %>% tukey_hsd(DMSP_nmol.ml ~ Timepoint) 
+pwc 
+```
+
+### DMSO Mucus stats
+
+```{r}
+nmr <- read.csv("NMR qPCR Masterfile_Mucus.csv", header = TRUE)
+
+# Summary statistics table
+nmr.summary <- nmr %>%
+  group_by(Treatment, Timepoint) %>%
+  get_summary_stats(DMSO_nmol.ml, type = "mean_se")
+
+nmr$Timepoint <- factor(nmr$Timepoint, levels = c("T0", "T1", "T2", "T3"))
+ggboxplot(nmr, x = "Timepoint", y = "DMSO_nmol.ml", color = "Treatment", palette = "jco", nrow = 1, add = "point")
+
+# Identify outliers
+nmr %>% 
+  group_by(Temperature, Timepoint) %>%
+  identify_outliers(DMSO_nmol.ml)
+
+# Check for normality with Shapiro
+nmr %>%
+  group_by(Timepoint, Treatment) %>%
+  shapiro_test(DMSO_nmol.ml)
+ggqqplot(nmr, "DMSO_nmol.ml", ggtheme = theme_bw()) + facet_grid(Timepoint ~ Treatment, labeller = "label_both")
+
+# homogeneity of variances or Levene's test
+nmr %>% levene_test(DMSO_nmol.ml ~ Treatment*Timepoint) # ok
+
+# ANOVA
+res.aov <- nmr %>% anova_test(DMSO_nmol.ml ~ Treatment*Timepoint)
+res.aov
+
+# Pairwise comparisons using Tukey's test:
+pwc <- nmr %>% tukey_hsd(DMSO_nmol.ml ~ Treatment)
+pwc
+```
+
+### DMSP Holobiont stats
+
+```{r}
+library(rstatix)
+library(ggpubr)
+
+nmr <- read.csv("NMR qPCR Masterfile_Holobiont.csv", header = TRUE)
+
+# Summary statistics table
+nmr.summary <- nmr %>%
+  group_by(Treatment, Timepoint) %>%
+  get_summary_stats(DMSP_nmol.mm2, type = "mean_se")
+
+nmr$Timepoint <- factor(nmr$Timepoint, levels = c("T0", "T1", "T2", "T3"))
+
+# Check for normality with Shapiro
+nmr %>%
+  group_by(Timepoint, Treatment) %>%
+  shapiro_test(DMSP_nmol.mm2)
+
+# homogeneity of variances or Levene's test
+nmr %>% levene_test(DMSP_nmol.mm2 ~ Treatment*Timepoint)
+
+# ANOVA
+res.aov <- nmr %>% anova_test(DMSP_nmol.mm2 ~ Treatment*Timepoint)
+res.aov
+  
+res.aov <- nmr %>% anova_test(DMSP_nmol.mm2 ~ Treatment)
+res.aov
+
+# Pairwise comparisons using Tukey's test:
+pwc <- nmr %>% tukey_hsd(DMSP_nmol.mm2 ~ Treatment) 
+pwc
+```
+
+## DMSO Holobiont stats
+
+```{r}
+library(rstatix)
+library(ggpubr)
+
+nmr <- read.csv("NMR qPCR Masterfile_Holobiont.csv", header = TRUE)
+
+# Summary statistics table
+nmr.summary <- nmr %>%
+  group_by(Treatment, Timepoint) %>%
+  get_summary_stats(DMSO_nmol.mm2, type = "mean_se")
+
+nmr$Timepoint <- factor(nmr$Timepoint, levels = c("T0", "T1", "T2", "T3"))
+ggboxplot(nmr, x = "Timepoint", y = "DMSO_nmol.mm2", color = "Treatment", palette = "jco", nrow = 1, add = "point")
+
+# Check for normality with Shapiro
+nmr %>%
+  group_by(Timepoint, Treatment) %>%
+  shapiro_test(DMSO_nmol.mm2)
+
+# homogeneity of variances or Levene's test
+nmr %>% levene_test(DMSO_nmol.mm2 ~ Treatment*Timepoint) # ok
+
+# ANOVA
+res.aov <- nmr %>% anova_test(DMSO_nmol.mm2 ~ Treatment*Timepoint)
+res.aov
+
+res.aov <- nmr %>% anova_test(DMSO_nmol.mm2 ~ Treatment) 
+res.aov
+
+# Pairwise comparisons using Tukey's test:
+pwc <- nmr %>% tukey_hsd(DMSO_nmol.mm2 ~ Treatment)
+pwc
+```
+
+# 16S analysis - import data and set up
+
+```{r}
+ps <- readRDS("phyloseq_DMSP.rds")
+
+# Replace NA with Unassigned
+taxtab <- as.data.frame(tax_table(ps)@.Data)
+taxtab <- taxtab %>%
+  apply(2, function(x) gsub("^$|^ $", NA, x)) %>%
+  replace_na("Unassigned")
+
+otutab <- as.data.frame(otu_table(ps)@.Data)
+
+samptab <- read.csv("Sample_metadata.csv", header = TRUE)
+rownames(samptab) <- samptab$SampleID
+samptab <- sample_data(samptab)
+
+seqs <- readDNAStringSet("ASV_nochim.txt")
+
+ps <- phyloseq(tax_table(taxtab), otu_table(otutab, taxa_are_rows = FALSE), sample_data(samptab), seqs)
+
+# Data cleanup
+ps <- subset_taxa(ps, Order != "Chloroplast")
+ps <- subset_taxa(ps, Family != "Mitochondria")
+ps <- subset_taxa(ps, Kingdom != "Eukaryota")
+ps <- subset_taxa(ps, Kingdom != "Archaea")
+ps <- subset_taxa(ps, Kingdom != "Unassigned")
+ps <- subset_taxa(ps, Phylum != "Unassigned")
+ps <- subset_taxa(ps, Order != "Unassigned")
+ps <- subset_taxa(ps, Phylum != "Cyanobacteria")
+
+ps <- subset_samples(ps, SampleID !="sa27")
+
+# prune OTUs that are not present in any of the samples
+ps <- prune_taxa(taxa_sums(ps) > 1, ps)
+#saveRDS(ps, file = "ps.rds")
+
+# Remove ASVs assigned as contaminants
+contam.extrac <- readxl::read_excel("Contaminants.xlsx", sheet = "ExtractionKit") %>%
+  select(ASV)
+
+ps <- prune_taxa(!(taxa_names(ps) %in% contam.extrac$ASV), ps)
+
+## Seawater:
+ps.water <- subset_samples(ps, Location == "Water") # keeps seawater
+
+contam.water <- readxl::read_excel("Contaminants.xlsx", sheet = "Water") %>%
+  select(ASV)
+ps.water <- prune_taxa(!(taxa_names(ps.water) %in% contam.water$ASV), ps.water)
+
+## Mucus & Holobiont
+ps.mucusholobiont <- subset_samples(ps, Location != "Water") # removes seawater
+
+contam.mucusholobiont <- readxl::read_excel("Contaminants.xlsx", sheet = "Mucus_Holobiont") %>%
+  select(ASV)
+ps.mucusholobiont <- prune_taxa(!(taxa_names(ps.mucusholobiont) %in% contam.mucusholobiont$ASV), ps.mucusholobiont)
+
+# MERGE
+ps <- merge_phyloseq(ps, ps.water, ps.mucusholobiont)
+ps <- prune_taxa(taxa_sums(ps) > 1, ps)
+
+tree <- read_tree("fastree_result.tree")
+ps <- merge_phyloseq(ps, tree)
+
+rm(ps.water, ps.mucusholobiont)
+rm(contam.extrac, contam.water, contam.mucusholobiont)
+
+ps <- subset_samples(ps, Location != "Holobiont") # removes holobiont
+ps <- prune_taxa(taxa_sums(ps) > 1, ps)
+```
+
+## Rarefaction 
+
+```{r}
+library(tibble)
+library(data.table)
+library(vegan)
+
+# Unrarefied
+
+ps.trans <- microbiome::transform(ps, transform = "hellinger", target = "OTU", shift = 0, scale = 1)
+ps.unifw <- ordinate(ps.trans, method = "PCoA", distance = "unifrac", weighted = TRUE)
+
+# Rarefied
+
+smallest <- min(sample_sums(ps))
+ps.rare <- rarefy_even_depth(ps, sample.size = smallest, verbose = FALSE, replace = TRUE)
+ps.rare <- prune_taxa(taxa_sums(ps.rare) > 0, ps.rare)
+
+ps.rare.trans <- microbiome::transform(ps.rare, transform = "hellinger", target = "OTU", shift = 0, scale = 1)
+ps.rare.unifw <- ordinate(ps.rare.trans, method = "PCoA", distance = "unifrac", weighted = TRUE)
+
+# Plot
+unifw.unrare <- data.frame(ps.unifw$vectors)
+unifw.unrare <- as.data.table(unifw.unrare)
+
+unifw.rare <- data.frame(ps.rare.unifw$vectors)
+unifw.rare <- as.data.table(unifw.rare)
+
+# Distances & direction samples moved between raw and rarefied
+po <- procrustes(X = unifw.unrare[, list(Axis.1, Axis.2)], Y = unifw.rare[, list(Axis.1, Axis.2)], symmetric = TRUE)
+plot(po)
+
+protest(X = unifw.unrare[, list(Axis.1, Axis.2)], Y = unifw.rare[, list(Axis.1, Axis.2)], scores = "sites", permutations = 999)
+
+# Create rarefied mucus table for qPCR analysis
+ps.mucus <- subset_samples(ps, Location != "Water") # removes water
+ps.mucus <- prune_taxa(taxa_sums(ps.mucus) > 1, ps.mucus)
+
+smallest <- min(sample_sums(ps.mucus))
+ps.mucus.rare <- rarefy_even_depth(ps.mucus, sample.size = smallest, verbose = FALSE, replace = TRUE)
+ps.mucus.rare <- prune_taxa(taxa_sums(ps.mucus.rare) > 0, ps.mucus.rare)
+#saveRDS(ps.mucus.rare, file = "ps.mucus.rare.rds")
+```
+
+## Goods Coverage
+
+```{r}
+library(QsRutils)
+
+# Unrarefied data
+OTU1 = as(otu_table(ps), "matrix")
+# transpose if necessary
+if(taxa_are_rows(ps)){OTU1 <- t(OTU1)}
+# Coerce to data.frame
+OTUdf = as.data.frame(OTU1)
+
+# samples as rows and OTUs as columns
+goods_result <- goods(OTUdf)
+goods_result
+
+summary(goods_result$goods)
+
+mean(goods_result$goods)
+round(sd(goods_result$goods), 2)
+#write.csv(goods_result, "goods_coverage.csv", row.names = FALSE)
+
+# For Rarefied data
+smallest <- min(sample_sums(ps))
+r <- rarefy_even_depth(ps, sample.size = smallest, verbose = FALSE, replace = TRUE)
+r <- prune_taxa(taxa_sums(r) > 0, r)
+
+# Extract abundance matrix from the phyloseq object
+OTU2 = as(otu_table(r), "matrix")
+if(taxa_are_rows(r)){OTU2 <- t(OTU2)}
+OTUdf2 = as.data.frame(OTU2)
+
+# samples as rows and OTUs as columns
+goods_result <- goods(OTUdf2)
+goods_result
+
+summary(goods_result$goods)
+
+mean(goods_result$goods)
+round(sd(goods_result$goods), 2)
+#write.csv(goods_result, "goods_coverage_rarefied.csv", row.names = FALSE)
+```
+
+# Fig 3a - Alpha diversity
+
+## Plot
+
+```{r}
+smallest <- min(sample_sums(ps))
+r <- rarefy_even_depth(ps, sample.size = smallest, verbose = FALSE, replace = TRUE)
+
+# prune OTUs that are not present in any of the samples, using rarefied data
+ps.pruned <- prune_taxa(taxa_sums(r) > 0, r)
+
+# Plot - Sample Type
+plot_richness(ps.pruned, x = "Location", measures=c("Chao1", "Observed")) +
+  geom_boxplot(outlier.size = 0.2) +
+  theme(aspect.ratio = 2, 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()
+        ) +
+  ylab("Alpha diversity") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+# Plot - Timepoint
+plot_richness(ps.pruned, x = "Timepoint", measures=c("Chao1", "Observed")) +
+  geom_boxplot(outlier.size = 0.2) +
+  theme(aspect.ratio = 2, 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()
+        ) +
+  ylab("Alpha diversity (n = 6)") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+## Diversity stats
+
+```{r}
+library(car)
+
+# Stats for Chao1 - SIG
+results.chao = estimate_richness(ps.pruned, measures = 'Chao1')
+
+results.chao <- results.chao %>%
+  tibble::rownames_to_column(var = "SampleID")
+
+meta <- data.frame(SampleID = sample_data(ps.pruned)$SampleID, 
+                   Location = sample_data(ps.pruned)$Location)
+
+results.chao <- left_join(results.chao, meta)
+
+res.chao.aov <- aov(Chao1 ~ Location, data = results.chao)
+summary(res.chao.aov)
+
+TukeyHSD(res.chao.aov)
+
+leveneTest(Chao1 ~ Location, data = results.chao)
+
+# Stats for Observed - SIG
+results.obs = estimate_richness(ps.pruned, measures = 'Observed')
+
+results.obs <- results.obs %>%
+  tibble::rownames_to_column(var = "SampleID")
+
+meta <- data.frame(SampleID = sample_data(ps.pruned)$SampleID,
+                   Location = sample_data(ps.pruned)$Location)
+results.obs <- left_join(results.obs, meta)
+
+res.obs.aov <- aov(Observed ~ Location, data = results.obs)
+summary(res.obs.aov)
+       
+TukeyHSD(res.obs.aov)
+
+leveneTest(Observed ~ Location, data = results.obs)
+```
+
+### Summary table
+https://github.com/kassambara/rstatix
+
+```{r}
+library(rstatix)  
+library(ggpubr)
+
+Obs.summary <- results.obs %>%
+                    group_by(Location) %>% 
+                    get_summary_stats(Observed, type = "common")
+
+Chao.summary <- results.chao %>%
+                    group_by(Location) %>% 
+                    get_summary_stats(Chao1, type = "common")
+
+summary.table <- rbind(Obs.summary, Chao.summary)
+#write.csv(x = summary.table, file = "Alpha diversity.summary.table-no holobiont.csv")
+```
+
+# Fig 3b - PCoA 
+Weighted Unifrac
+
+```{r}
+# Location (coloured) + sampling timepoint
+unif <- phyloseq::distance(ps, "wunifrac")
+unif.ord <- ordinate(ps, method = "PCoA", unif)
+p_jacc <- plot_ordination(ps, unif.ord, color = "Location", shape = "Timepoint")
+p_jacc + geom_point(size = 6) + theme_bw() + theme_classic() + 
+  theme(text = element_text(size = 11)) + stat_ellipse(aes(colour = Location, group = Location), level = 0.80) +
+  labs("Temperature") + 
+  scale_color_manual(values=c("yellowgreen", "darkblue", "cornflowerblue")) +
+  scale_shape_manual(values = c(16, 17, 18, 19), name = "Sampling timepoint") +
+  theme(axis.text.x=element_text(colour="black")) +
+  theme(axis.text.y=element_text(colour="black")) # Used this one
+
+```
+
+## Beta diversity
+USING UNRAREFIED, Unifrac
+### Sample Type
+
+```{r}
+
+# Good tutorial: http://rfunctions.blogspot.com/2019/03/betadisper-and-adonis-homogeneity-of.html
+trans.adonis <- filter_taxa(ps, function(x) sum(x) > 0.01, TRUE)
+trans.adonis <- transform_sample_counts(trans.adonis, function(x) x / sum(x))
+trans.adonis <- microbiome::transform(trans.adonis, transform = "hellinger", target = "OTU", shift = 0, scale = 1)
+
+unifrac <- phyloseq::distance(trans.adonis, method = "unifrac", weighted = TRUE)
+sampledf <- data.frame(sample_data(trans.adonis))
+
+adonis(formula = unifrac ~ Location, data = sampledf, permutations = 9999)
+
+# Test for homogenity of variance around centroids.
+beta <- betadisper(unifrac, sampledf$Location)
+boxplot(beta)
+anova(beta)
+
+# A Tukey's test can be done to see if and which groups differ in relation to their variances (in our case, groups are not different):
+
+TukeyHSD(beta)
+beta.HSD <- TukeyHSD(beta)
+plot(beta.HSD)
+
+## Now that we know that groups have homogenous variances, we can test if compositions are different
+plot(beta)
+
+# Permutest Null hypothesis of no difference in dispersion between groups
+permutest(beta, pairwise = TRUE, permutations = 9999) 
+
+# nested design
+adonis2(formula = unifrac ~ Location * Temperature/Timepoint, data = sampledf, strata = sampledf$Temperature, permutations = 9999)               
+```
+
+#### Pairwise adonis
+
+```{r}
+library(pairwiseAdonis)
+
+# Check difference in composition
+pairwise.adonis(unifrac, sampledf$Location, p.adjust.m = "BH", perm = 9999) # BH helps you to avoid Type I errors (false positives)
+```
+
+# Fig 3c - Relative abundance
+## All samples
+
+```{r}
+trans <- transform_sample_counts(ps, function(x) x/sum(x)*100)
+
+glom <- tax_glom(trans, taxrank = "Phylum")
+rel.abund <- psmelt(glom) %>%
+  group_by(Location, OTU, Phylum) %>%
+  summarise(Relative_abun = sum(Abundance/n()),
+            SE_rel = sd(Abundance)/sqrt(n()))
+#write.csv(rel.abund, file = "relative.abundance new.csv")
+```
+
+### Plot - all
+
+```{r}
+glom <- tax_glom(ps, taxrank = "Phylum")
+
+trans <- transform_sample_counts(glom, function(x) x/sum(x)*100)
+trans <- filter_taxa(trans, function(x) mean(x) > 0.01, TRUE)
+
+long <- psmelt(trans) %>%
+  group_by(Location, OTU, Phylum) %>%
+  summarise(Relative_abun = sum(Abundance/n()),
+            SE_rel = sd(Abundance)/sqrt(n()))
+
+theme_set(theme_bw())
+ggplot(long, aes(x = Location, y = Relative_abun)) +
+    geom_bar(stat = "identity", aes(fill = Phylum), colour = "black", position = "stack") +
+    ggsci::scale_fill_d3(palette = "category20") +
+     theme(aspect.ratio = 1, legend.position = "right") +
+                theme(axis.text.x = element_text(colour = "black", size = 11), axis.text.y = element_text(colour = "black", size = 11)) +
+                theme(axis.title.x = element_text(colour = "black", size = 11), axis.title.y = element_text(colour = "black", size = 11),
+                   legend.title = element_text(size = 11), legend.text = element_text(size = 11)) +
+                theme(panel.grid.minor = element_line(size = 0.5), panel.grid.major = element_line(size = 0.5)) +
+    guides(fill = guide_legend(ncol = 1)) +
+    ylab("Relative Abundance (%)") + xlab("Sample type")
+```
+
+## Plot - Sample Type
+
+```{r}
+## Class
+glom <- tax_glom(ps, taxrank = "Class")
+
+# Mucus
+Mucus <- subset_samples(glom, Location == "Mucus")
+Mucus <- transform_sample_counts(Mucus, function(x) x/sum(x)*100)
+Mucus <- filter_taxa(Mucus, function(x) mean(x) > 1, TRUE)
+
+Mucus <- psmelt(Mucus) %>%
+  group_by(Location, OTU, Phylum, Class) %>%
+  summarise(Relative_abun = sum(Abundance/n()),
+            SE_rel = sd(Abundance)/sqrt(n()))
+# Water
+Water <- subset_samples(glom, Location == "Water")
+Water <- transform_sample_counts(Water, function(x) x/sum(x)*100)
+Water <- filter_taxa(Water, function(x) mean(x) > 1, TRUE)
+
+Water <- psmelt(Water) %>%
+  group_by(Location, OTU, Phylum, Class) %>%
+  summarise(Relative_abun = sum(Abundance/n()),
+            SE_rel = sd(Abundance)/sqrt(n()))
+
+relabun_location <- rbind(Mucus, Water)
+#write.csv(x = relabun_location, file = "relative.abundace_per location CLASS.csv")
+
+### Family
+glom <- tax_glom(ps, taxrank = "Family")
+
+# Mucus
+Mucus <- subset_samples(glom, Location == "Mucus")
+Mucus <- transform_sample_counts(Mucus, function(x) x/sum(x)*100)
+Mucus <- filter_taxa(Mucus, function(x) mean(x) > 1, TRUE)
+
+Mucus <- psmelt(Mucus) %>%
+  group_by(Location, OTU, Phylum, Class, Order, Family) %>%
+  summarise(Relative_abun = sum(Abundance/n()),
+            SE_rel = sd(Abundance)/sqrt(n()))
+# Water
+Water <- subset_samples(glom, Location == "Water")
+Water <- transform_sample_counts(Water, function(x) x/sum(x)*100)
+Water <- filter_taxa(Water, function(x) mean(x) > 1, TRUE)
+
+Water <- psmelt(Water) %>%
+  group_by(Location, OTU, Phylum, Class, Order, Family) %>%
+  summarise(Relative_abun = sum(Abundance/n()),
+            SE_rel = sd(Abundance)/sqrt(n()))
+
+relabun_location <- rbind(Mucus, Water)
+#write.csv(x = relabun_location, file = "relative.abundace_per location FAMILY.csv")
+```
+
+# Fig 4 - DMSP-Degrading genes
+
+```{r}
+library(ggsci)
+library(RColorBrewer)
+
+# dddP
+dddp_df <- readxl::read_excel("Table dmdA-dddP_final.xlsx", sheet = "dddP") %>%
+  select(Genus = `Genome taxonomy`, contains("T3"), Class) %>%
+  pivot_longer(T3_27_1:T3_32_3) %>%
+  mutate(treatment = case_when(str_detect(name, "27") ~ "Control", TRUE ~ "Treatment")) %>%
+  mutate(gene = "dddP") %>%
+  group_by(name, treatment, Genus, Class, gene) %>%
+  summarise(new_val = sum(value)) %>%
+  ungroup() %>%
+  group_by(name) %>%
+  mutate(value_rel = (new_val/9182)*100)
+
+# dmdA
+dmdA_df <- readxl::read_excel("Table dmdA-dddP_final.xlsx", sheet = "dmdA") %>%
+  select(Genus = `Genome taxonomy`, contains("T3"), Class) %>%
+  pivot_longer(T3_27_1:T3_32_3) %>%
+  mutate(treatment = case_when(str_detect(name, "27") ~ "Control", TRUE ~ "Treatment")) %>%
+  mutate(gene = "dmdA") %>%
+  group_by(name, treatment, Genus, Class, gene) %>%
+  summarise(new_val = sum(value)) %>%
+  ungroup() %>%
+  group_by(name) %>%
+  mutate(value_rel = (new_val/9182)*100)
+
+plot_df <- rbind(dddp_df, dmdA_df) %>%
+  arrange(Class, Genus) %>%
+  mutate(Class_Genus = paste0(Class, "; ", Genus)) %>%
+  mutate(Class_Genus = fct_inorder(Class_Genus))
+
+alpha_names <- levels(plot_df$Class_Genus)[1:12]
+gamma_names <- levels(plot_df$Class_Genus)[13:16]
+
+n <- length(alpha_names)
+alpha_pal = viridis::viridis(n)
+names(alpha_pal) <- alpha_names
+
+n <- length(gamma_names)
+gamma_pal = c("#ff1212", "#ff1279", "#ff12db", "#ff85ec")
+names(gamma_pal) <- gamma_names
+
+all_pal <- c(alpha_pal, gamma_pal)
+
+# Pot for averages
+plot_df %>%
+  group_by(Class_Genus, treatment, gene) %>%
+  summarise(mean_value_rel = mean(value_rel)) %>%
+    ggplot(aes(treatment, mean_value_rel)) +
+  geom_bar(stat = "identity", aes(fill = Class_Genus), colour = "black") +
+  facet_wrap(~gene, scale = "free_x") +
+  scale_fill_manual(values = all_pal) +
+  ylab("Average relative abundance (%)") +
+  xlab("Treatment") +
+  theme(aspect.ratio = 1.25)
+```
+
+## Beta diversity: Mucus degrading genes T3 only Temperature
+
+```{r}
+mucus_rare <- read_csv("otu_table_mucus_rarefied.csv") %>%
+  group_by(OTUID) %>%
+  sample_n(1)
+
+otu_tab <- mucus_rare %>% 
+  tibble::column_to_rownames(var = "OTUID") %>%
+  select(sa13:sa18)
+
+taxtab <- mucus_rare %>% 
+  tibble::column_to_rownames(var = "OTUID") %>%
+  select(Kingdom:Genus)
+
+taxtab_names <- rownames(taxtab)
+taxtab <- tax_table(taxtab)
+taxa_names(taxtab) <- taxtab_names
+
+sd <- sample_data(ps)
+
+mucus_rare_ps <- phyloseq(otu_table(otu_tab, taxa_are_rows = TRUE), taxtab, sample_data(sd))
+tree <- read_tree("fastree_result.tree")
+mucus_rare_ps <- merge_phyloseq(mucus_rare_ps, tree)
+
+trans.adonis <- microbiome::transform(mucus_rare_ps, transform = "hellinger", target = "OTU", shift = 0, scale = 1)
+
+unifrac <- phyloseq::distance(mucus_rare_ps, method = "unifrac", weighted = TRUE)
+sampledf <- data.frame(sample_data(trans.adonis))
+
+## TEMPERATURE
+adonis(formula = unifrac ~ Temperature, data = sampledf, permutations = 999)
+
+# Test for homogenity of variance around centroids
+beta <- betadisper(unifrac, sampledf$Temperature)
+boxplot(beta)
+anova(beta)
+plot(beta)
+```
+
+# Fig 5 - qPCR data
+
+## MUCUS dmdA stats
+
+```{r}
+# https://www.datanovia.com/en/lessons/anova-in-r/
+library(rstatix)
+library(ggpubr)
+
+nmr <- read.csv("NMR qPCR Masterfile_Mucus.csv", header = TRUE) %>%
+  filter(dmdA_A1uL.16Scopies != 0.00)
+
+# Summary statistics table
+nmr.summary <- nmr %>%
+  group_by(Treatment, Timepoint) %>%
+  get_summary_stats(dmdA_A1uL.16Scopies, type = "mean_se") #%>%
+
+nmr$Timepoint <- factor(nmr$Timepoint, levels = c("T0", "T1", "T2", "T3"))
+ggboxplot(nmr, x = "Timepoint", y = "dmdA_A1uL.16Scopies", color = "Treatment", palette = "jco", nrow = 1, add = "point")
+
+# Check for normality with Shapiro
+nmr %>%
+  group_by(Timepoint, Treatment) %>%
+  shapiro_test(dmdA_A1uL.16Scopies)
+
+# homogeneity of variances or Levene's test
+nmr %>% levene_test(dmdA_A1uL.16Scopies ~ Treatment*Timepoint)
+
+# ANOVA
+res.aov <- nmr %>% anova_test(dmdA_A1uL.16Scopies ~ Treatment*Timepoint)
+res.aov
+
+# Pairwise comparisons using Tukey's test:
+pwc <- nmr %>% tukey_hsd(dmdA_A1uL.16Scopies ~ Timepoint)
+pwc
+```
+
+### 5a Plot
+
+```{r}
+theme_set(theme_bw())
+nmr.summary %>%
+  #mutate(Timepoint_Treatment = paste0(Timepoint, "_", Treatment)) %>%
+Mucusdmda <- ggplot(aes(x = Timepoint, y = mean, group = Treatment)) +
+    geom_path(aes(linetype = Treatment)) +
+    geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.1) +
+    geom_point(stat = "identity", aes(fill = Treatment), size = 5, shape = 21) +
+    theme(aspect.ratio = 1, legend.position = "right") +
+    theme(axis.text.x = element_text(colour = "black", size = 11), axis.text.y = element_text(colour = "black", size = 11)) +
+    theme(axis.title.x = element_text(colour = "black", size = 11), axis.title.y = element_text(colour = "black", size = 11), 
+          legend.title = element_text(size = 11), legend.text = element_text(size = 11)) +
+    theme(panel.grid.minor = element_line(size = 0.5), panel.grid.major = element_line(size = 0.5)) +
+    scale_fill_manual(values = c("white", "red")) +
+    scale_linetype_manual(values=c("dashed", "solid")) +
+    ylab("dmdA/A1 per 16S copies") + xlab("Timepoint") +
+    ylim(0, 0.8)
+Mucusdmda
+```
+
+## MUCUS dddP stats
+
+```{r}
+# https://www.datanovia.com/en/lessons/anova-in-r/
+library(rstatix)
+library(ggpubr)
+
+nmr <- read.csv("NMR qPCR Masterfile_Mucus.csv", header = TRUE) %>%
+  filter(dddPuL.16Scopies != 0.00)
+
+# Summary statistics table
+nmr.summary <- nmr %>%
+  group_by(Treatment, Timepoint) %>%
+  get_summary_stats(dddPuL.16Scopies, type = "mean_se")
+
+nmr$Timepoint <- factor(nmr$Timepoint, levels = c("T0", "T1", "T2", "T3"))
+ggboxplot(nmr, x = "Timepoint", y = "dddPuL.16Scopies", color = "Treatment", palette = "jco", nrow = 1, add = "point")
+
+# Identify outliers
+nmr %>% 
+  group_by(Temperature, Timepoint) %>%
+  identify_outliers(dddPuL.16Scopies)
+
+# Check for normality with Shapiro
+nmr %>%
+  group_by(Timepoint, Treatment) %>%
+  shapiro_test(dddPuL.16Scopies)
+
+# homogeneity of variances or Levene's test
+nmr %>% levene_test(dddPuL.16Scopies ~ Treatment*Timepoint)
+
+# ANOVA
+res.aov <- nmr %>% anova_test(dddPuL.16Scopies ~ Treatment*Timepoint)
+res.aov
+
+pwc <- nmr %>% tukey_hsd(dddPuL.16Scopies ~ Treatment)
+pwc
+```
+
+### 5b Plot
+
+```{r}
+theme_set(theme_bw())
+nmr.summary %>%
+mucusdddp <- ggplot(aes(x = Timepoint, y = mean, group = Treatment)) +
+    geom_path(aes(linetype = Treatment)) +
+    geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.1) +
+    geom_point(stat = "identity", aes(fill = Treatment), size = 5, shape = 21) +
+    theme(aspect.ratio = 1, legend.position = "right") +
+    theme(axis.text.x = element_text(colour = "black", size = 11), axis.text.y = element_text(colour = "black", size = 11)) +
+    theme(axis.title.x = element_text(colour = "black", size = 11), axis.title.y = element_text(colour = "black", size = 11), 
+          legend.title = element_text(size = 11), legend.text = element_text(size = 11)) +
+    theme(panel.grid.minor = element_line(size = 0.5), panel.grid.major = element_line(size = 0.5)) +
+    scale_fill_manual(values = c("white", "red")) +
+    scale_linetype_manual(values=c("dashed", "solid")) +
+    ylab("dddP per 16S copies") + xlab("Timepoint") +
+    ylim(0, 0.3)
+mucusdddp
+
+Fig5ab <- ggarrange(Mucusdmda, Mucusdddp,
+                     labels = c("(A)", "(B)"),
+                     ncol = 2, nrow = 2, 
+                     common.legend = TRUE, legend = "bottom")
+```
+
+## 5c - MUCUS Ratio dddP:dmdA stats
+Clevage:demethylation (always more present). Ratio >1 clevage is higher then demethylation
+
+```{r}
+## MUCUS dmdA
+
+library(rstatix)
+library(ggpubr)
+
+nmr <- read.csv("NMR qPCR Masterfile_Mucus.csv", header = TRUE) %>%
+  filter(dddP.dmdA_Ratio != 0.00)
+
+# Summary statistics table
+nmr.summary <- nmr %>%
+  group_by(Treatment, Timepoint) %>%
+  get_summary_stats(dddP.dmdA_Ratio, type = "mean_se")
+
+nmr$Timepoint <- factor(nmr$Timepoint, levels = c("T0", "T1", "T2", "T3"))
+
+# Identify outliers
+nmr %>% 
+  group_by(Treatment, Timepoint) %>%
+  identify_outliers(dddP.dmdA_Ratio)
+
+# homogeneity of variances or Levene's test
+nmr %>% levene_test(dddP.dmdA_Ratio ~ Treatment*Timepoint)
+
+# ANOVA
+res.aov <- nmr %>% anova_test(dddP.dmdA_Ratio ~ Treatment*Timepoint)
+res.aov
+
+# Pairwise comparisons using Tukey's test:
+pwc <- nmr %>% tukey_hsd(dddP.dmdA_Ratio ~ Timepoint) # diff
+pwc
+```
+
+### 5c Plot
+
+```{r}
+## SCATTERPLOT
+nmr <- read.csv("NMR qPCR Masterfile_Mucus.csv", header = TRUE) %>%
+  filter(dddP.dmdA_Ratio != 0.00)
+
+theme_set(theme_bw())
+ratiolog2 <- ggplot(nmr, aes(x = DMSP_nmol.ml, y = dddP.dmdA_Ratio)) +
+  geom_point(aes(fill = as.factor(Temperature), colour = as.factor(ActualExperimentalTemp)), size = 5) +
+  xscale("log10", .format = TRUE) +
+  theme(aspect.ratio = 0.55, legend.position = "right") +
+    theme(axis.text.x = element_text(colour = "black", size = 11), axis.text.y = element_text(colour = "black",        size = 11)) +
+    theme(axis.title.x = element_text(colour = "black", size = 11), axis.title.y = element_text(colour = "black",      size = 11), legend.title = element_text(size = 11), legend.text = element_text(size = 11)) +
+    theme(panel.grid.minor = element_line(size = 0.5), panel.grid.major = element_line(size = 0.5)) +
+  ylab("Ratio dddP:dmdA A/1") + xlab("DMSP (uM)")
+  #guides(fill = guide_legend(override.aes = list(shape = 21)))
+ratiolog2 # NEW FIG 5c option
+
+```
