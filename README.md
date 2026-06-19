@@ -1,7 +1,1 @@
-# Mucus-DMSP
-
-[SUBMITTED] Increased DMSP availability during thermal stress directly impacts DMSP-degrading bacteria in coral mucus
-
-Stephanie G. Gardner, Matthew R. Nitschke, James O’Brien, Cherie A. Motti, Justin R. Seymour, Peter J. Ralph, Katherina Petrou, Jean-Baptiste Raina
-
-DMSP-degrading bacteria in Acropora millepora coral mucus under thermal stress
+Gardner SG, Nitschke MR, O’Brien J, Motti CA, Seymour JR, Ralph PJ, Petrou K and Raina J-B (2022) Increased DMSP availability during thermal stress influences DMSP-degrading bacteria in coral mucus. Front. Mar. Sci. 9:912862. doi: 10.3389/fmars.2022.912862
